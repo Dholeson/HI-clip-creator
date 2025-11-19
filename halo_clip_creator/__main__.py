@@ -4,11 +4,11 @@ import argparse
 import logging
 from pathlib import Path
 
-from .analytics import AnalyticsTracker
-from .config import SettingsError, load_settings
-from .monitor import ClipMonitor
-from .naming import ClipNamer
-from .obs_client import ObsClient
+from halo_clip_creator.analytics import AnalyticsTracker
+from halo_clip_creator.config import SettingsError, load_settings
+from halo_clip_creator.monitor import ClipMonitor
+from halo_clip_creator.naming import ClipNamer
+from halo_clip_creator.obs_client import ObsClient
 
 
 def build_argument_parser() -> argparse.ArgumentParser:
@@ -34,7 +34,7 @@ def main() -> None:
     )
 
     if args.ui:
-        from .gui import launch_ui
+        from halo_clip_creator.gui import launch_ui
 
         launch_ui(args.config)
         return
