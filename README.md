@@ -91,4 +91,15 @@ Prefer a UI? Launch the configuration app to pick the capture box, manage medals
 python -m halo_clip_creator --ui --config config.yaml
 ```
 
-Keep an eye on the logs for OCR scores, medal chain buffers, and clip names. To adjust sensitivity, tweak the `match_threshold` for each medal and the `sample_rate_hz` for performance. The analytics JSON (session + history) will summarize medal counts and every clip that was created during the run.
+ Keep an eye on the logs for OCR scores, medal chain buffers, and clip names. To adjust sensitivity, tweak the `match_threshold` for each medal and the `sample_rate_hz` for performance. The analytics JSON (session + history) will summarize medal counts and every clip that was created during the run.
+
+## Building a release binary
+
+You can publish a single-file binary for players who don't want to install Python. The project includes a helper that wraps PyInstaller:
+
+```bash
+pip install pyinstaller
+python build_binary.py
+```
+
+The compiled binary will be written to `dist/halo-clip-creator` (or `halo-clip-creator.exe` on Windows) and bundles the CLI + UI entrypoints. Tesseract and OBS with obs-websocket still need to be installed on the target machine. You can attach the `dist/` artifact directly to a GitHub release.
