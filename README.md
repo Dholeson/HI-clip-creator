@@ -89,7 +89,7 @@ Run the monitor with your configuration:
 python -m halo_clip_creator --config config.yaml --log-level INFO
 ```
 
-Prefer a UI? Launch the configuration app to pick the capture box (on any display), manage medals, and review analytics without editing YAML. The UI can scan for a live Halo Infinite window by both title and executable name, snap the capture region to that window, and surface live stats, medal distributions, and recent sessions in a futuristic control deck:
+Prefer a UI? Launch the configuration app to pick the capture box (on any display), manage medals, and review analytics without editing YAML. The UI can scan for a live Halo Infinite window by both title and executable name, snap the capture region to that window, and surface live stats, medal distributions, and recent sessions in a futuristic control deck. If it can’t find Halo by name, it will fall back to showing every visible window so you can manually pick the right one from the dropdown:
 
 ```bash
 python -m halo_clip_creator --ui --config config.yaml

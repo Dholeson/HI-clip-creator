@@ -431,6 +431,7 @@ class SettingsApp(tb.Window if tb else tk.Tk):
         self.monitor_lookup: Dict[str, dict] = {}
         self._init_style()
         self._build_ui()
+        self._scan_windows(silent=True)
 
     def _init_style(self) -> None:
         self.colors = {
@@ -637,11 +638,22 @@ class SettingsApp(tb.Window if tb else tk.Tk):
             monitor = monitors[0]
         RegionSelector(self, callback, monitor)
 
-    def _scan_windows(self) -> None:
+    def _scan_windows(self, silent: bool = False) -> None:
         hint = self.window_hint.get().strip() or None
         windows = _list_windows(hint, self._process_names())
+
+        fallback_note = None
         if not windows:
-            messagebox.showwarning("No windows", "No active windows found that match Halo. Launch the game and try again.")
+            fallback_note = "No windows matched the Halo filters; showing all visible windows instead."
+            windows = _list_windows(None, self._process_names())
+        if not windows:
+            fallback_note = "No windows matched the process filters; showing every visible window."
+            windows = _list_windows(None, [])
+        if not windows:
+            if not silent:
+                messagebox.showwarning(
+                    "No windows", "No active windows were detected. Launch the game or another window and try again."
+                )
             self.window_lookup = {}
             self.window_combo["values"] = []
             return
@@ -649,14 +661,19 @@ class SettingsApp(tb.Window if tb else tk.Tk):
         titles = sorted(windows.keys())
         self.window_combo["values"] = titles
         preferred = self.settings.monitor.preferred_window_title
-        if preferred and preferred in windows:
+        current = self.window_combo.get()
+        if current and current in windows:
+            self.window_combo.set(current)
+        elif preferred and preferred in windows:
             self.window_combo.set(preferred)
         else:
             self.window_combo.set(titles[0])
+        if fallback_note and not silent:
+            messagebox.showinfo("Showing all windows", fallback_note)
         self._apply_window_region()
 
     def _apply_window_region(self) -> None:
-        title = self.window_hint.get().strip()
+        title = self.window_combo.get().strip() or self.window_hint.get().strip()
         if not title or title not in self.window_lookup:
             messagebox.showinfo("Select a window", "Choose a detected Halo window before snapping the region.")
             return
