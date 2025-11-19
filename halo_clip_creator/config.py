@@ -42,6 +42,7 @@ class MonitorSettings:
     grayscale: bool = True
     tesseract_config: str = "--psm 6"
     detection_buffer_seconds: float = 6.0
+    preferred_window_title: Optional[str] = None
 
 
 @dataclass
@@ -115,6 +116,7 @@ class _Loader:
             grayscale=bool(data.get("grayscale", True)),
             tesseract_config=str(data.get("tesseract_config", "--psm 6")),
             detection_buffer_seconds=float(data.get("detection_buffer_seconds", 6.0)),
+            preferred_window_title=data.get("preferred_window_title"),
         )
 
     def load_obs(self, data: Dict) -> OBSSettings:
@@ -162,6 +164,7 @@ def default_settings() -> Settings:
             MedalSettings(name="KILLIONAIRE", aliases=["Killionaire"], match_threshold=0.7, cooldown_seconds=6.0),
             MedalSettings(name="DOUBLE KILL", aliases=["Double Kill"], match_threshold=0.65, cooldown_seconds=4.0),
         ],
+        preferred_window_title="Halo Infinite",
     )
     analytics = AnalyticsSettings()
     return Settings(obs=obs, monitor=monitor, analytics=analytics)
@@ -184,6 +187,7 @@ def settings_to_dict(settings: Settings) -> Dict:
             "grayscale": monitor.grayscale,
             "tesseract_config": monitor.tesseract_config,
             "detection_buffer_seconds": monitor.detection_buffer_seconds,
+            "preferred_window_title": monitor.preferred_window_title,
         }
 
     def _convert_obs(obs: OBSSettings) -> Dict:

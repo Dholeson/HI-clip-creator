@@ -24,7 +24,7 @@ A lightweight Python monitor that watches a defined portion of the Halo Infinite
    pip install -r requirements.txt
    ```
 
-   The configuration UI uses `tkinter`, which ships with most Python installations.
+   The configuration UI uses `tkinter`, which ships with most Python installations. For Halo window auto-detection and the neon UI skin, the app also uses `pygetwindow` (Windows/macOS) and `ttkbootstrap` for styling—both are installed automatically from `requirements.txt`.
 
    You also need [Tesseract OCR](https://tesseract-ocr.github.io/). On Windows, install the official binaries and ensure `tesseract.exe` is in your `PATH`. On macOS, `brew install tesseract`. On Linux, use your package manager (e.g., `sudo apt install tesseract-ocr`).
 
@@ -59,6 +59,7 @@ monitor:
   grayscale: true
   tesseract_config: "--psm 6 --oem 3"
   detection_buffer_seconds: 6.0
+  preferred_window_title: "Halo Infinite"
   medals:
     - name: OVERKILL
       aliases: ["OVER KILL"]
@@ -85,7 +86,7 @@ Run the monitor with your configuration:
 python -m halo_clip_creator --config config.yaml --log-level INFO
 ```
 
-Prefer a UI? Launch the configuration app to pick the capture box, manage medals, and review analytics without editing YAML:
+Prefer a UI? Launch the configuration app to pick the capture box, manage medals, and review analytics without editing YAML. The UI can scan for a live Halo Infinite window and snap the capture region to it, and it surfaces live stats, medal distributions, and recent sessions in a futuristic control deck:
 
 ```bash
 python -m halo_clip_creator --ui --config config.yaml
@@ -103,4 +104,4 @@ pip install -r requirements-build.txt
 python build_binary.py
 ```
 
-The compiled binary will be written to `dist/halo-clip-creator` (or `halo-clip-creator.exe` on Windows) and bundles the CLI + UI entrypoints. The builder explicitly pulls in OpenCV (`cv2`) so OCR monitoring works out-of-the-box. Tesseract and OBS with obs-websocket still need to be installed on the target machine. You can attach the `dist/` artifact directly to a GitHub release.
+The compiled binary will be written to `dist/halo-clip-creator` (or `halo-clip-creator.exe` on Windows) and bundles the CLI + UI entrypoints. The builder explicitly pulls in OpenCV (`cv2`), `pygetwindow`, and `ttkbootstrap` so OCR monitoring, Halo window detection, and the styled UI all work out-of-the-box. Tesseract and OBS with obs-websocket still need to be installed on the target machine. You can attach the `dist/` artifact directly to a GitHub release.

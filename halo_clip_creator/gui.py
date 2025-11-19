@@ -3,12 +3,22 @@ from __future__ import annotations
 import logging
 import tkinter as tk
 from pathlib import Path
-from tkinter import messagebox, ttk
-from typing import Callable, List, Optional, Sequence
+from tkinter import font as tkfont, messagebox, ttk
+from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 import mss
 import numpy as np
 from PIL import Image, ImageTk
+
+try:
+    import pygetwindow as gw
+except Exception:  # pragma: no cover - optional dependency at runtime
+    gw = None
+
+try:
+    import ttkbootstrap as tb
+except Exception:  # pragma: no cover - optional dependency at runtime
+    tb = None
 
 from halo_clip_creator.analytics import load_history, load_session_summary
 from halo_clip_creator.config import (
@@ -23,6 +33,33 @@ from halo_clip_creator.config import (
 )
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _list_windows(filter_hint: Optional[str] = None) -> Dict[str, Tuple[int, int, int, int]]:
+    """Return a mapping of window titles to geometry, filtered toward Halo by default."""
+
+    if gw is None:
+        LOGGER.info("pygetwindow not available; window auto-detection disabled")
+        return {}
+
+    windows: Dict[str, Tuple[int, int, int, int]] = {}
+    try:
+        for window in gw.getAllWindows():
+            title = (window.title or "").strip()
+            if not title or window.isMinimized or not window.isVisible:
+                continue
+            geometry = (window.left, window.top, window.width, window.height)
+            windows[title] = geometry
+    except Exception:  # pragma: no cover - depends on OS window APIs
+        LOGGER.exception("Unable to enumerate windows for auto-detection")
+        return {}
+
+    if filter_hint:
+        lowered = filter_hint.lower()
+        filtered = {t: g for t, g in windows.items() if lowered in t.lower()}
+        if filtered:
+            return filtered
+    return windows
 
 
 class RegionSelector(tk.Toplevel):
@@ -171,71 +208,172 @@ class MedalEditor(ttk.Frame):
 
 class AnalyticsPanel(ttk.Frame):
     def __init__(self, master: tk.Misc, settings: Settings):
-        super().__init__(master, padding=8)
+        super().__init__(master, padding=16, style="Surface.TFrame")
         self.settings = settings
+        self.session_payload: Optional[dict] = None
+        self.history_payload: List[dict] = []
         self._build()
         self.refresh()
 
     def _build(self) -> None:
-        self.columnconfigure(1, weight=1)
-        ttk.Label(self, text="Session summary").grid(row=0, column=0, sticky=tk.W)
-        self.session_text = tk.Text(self, height=8, width=60)
-        self.session_text.grid(row=1, column=0, columnspan=2, sticky=tk.EW)
-        self.session_text.configure(state=tk.DISABLED)
+        self.columnconfigure(0, weight=1)
 
-        ttk.Label(self, text="History (latest 5 sessions)").grid(row=2, column=0, sticky=tk.W, pady=(8, 0))
-        self.history_text = tk.Text(self, height=8, width=60)
-        self.history_text.grid(row=3, column=0, columnspan=2, sticky=tk.EW)
-        self.history_text.configure(state=tk.DISABLED)
-        ttk.Button(self, text="Refresh analytics", command=self.refresh).grid(row=4, column=0, pady=6, sticky=tk.W)
+        header = ttk.Label(self, text="Live analytics", style="Heading.TLabel")
+        header.grid(row=0, column=0, sticky=tk.W, pady=(0, 8))
+
+        self.stats_frame = ttk.Frame(self, style="Surface.TFrame")
+        self.stats_frame.grid(row=1, column=0, sticky=tk.EW)
+        self.stats_frame.columnconfigure((0, 1, 2), weight=1)
+
+        self.stat_cards = {
+            "clips": self._build_stat_card(self.stats_frame, 0, "Clips captured", "0"),
+            "medals": self._build_stat_card(self.stats_frame, 1, "Medals seen", "0"),
+            "pace": self._build_stat_card(self.stats_frame, 2, "Medals/min", "0.0"),
+        }
+
+        chart_frame = ttk.Frame(self, padding=12, style="Card.TFrame")
+        chart_frame.grid(row=2, column=0, sticky=tk.NSEW, pady=(12, 8))
+        chart_frame.columnconfigure(0, weight=1)
+        ttk.Label(chart_frame, text="Medal distribution", style="CardHeading.TLabel").grid(
+            row=0, column=0, sticky=tk.W
+        )
+        self.medal_tree = ttk.Treeview(
+            chart_frame,
+            columns=("medal", "count", "share"),
+            show="headings",
+            height=6,
+            style="Treeview",
+        )
+        self.medal_tree.heading("medal", text="Medal")
+        self.medal_tree.heading("count", text="Count")
+        self.medal_tree.heading("share", text="Share")
+        self.medal_tree.column("medal", width=180)
+        self.medal_tree.column("count", anchor=tk.CENTER, width=80)
+        self.medal_tree.column("share", anchor=tk.CENTER, width=100)
+        self.medal_tree.grid(row=1, column=0, sticky=tk.NSEW, pady=(6, 0))
+
+        history_frame = ttk.Frame(self, padding=12, style="Card.TFrame")
+        history_frame.grid(row=3, column=0, sticky=tk.NSEW)
+        history_frame.columnconfigure(0, weight=1)
+        ttk.Label(history_frame, text="Latest sessions", style="CardHeading.TLabel").grid(
+            row=0, column=0, sticky=tk.W
+        )
+        self.history_tree = ttk.Treeview(
+            history_frame,
+            columns=("session", "clips", "medals"),
+            show="headings",
+            height=5,
+            style="Treeview",
+        )
+        self.history_tree.heading("session", text="Session")
+        self.history_tree.heading("clips", text="Clips")
+        self.history_tree.heading("medals", text="Unique medals")
+        self.history_tree.column("session", width=220)
+        self.history_tree.column("clips", anchor=tk.CENTER, width=80)
+        self.history_tree.column("medals", anchor=tk.CENTER, width=120)
+        self.history_tree.grid(row=1, column=0, sticky=tk.NSEW, pady=(6, 0))
+
+        ttk.Button(self, text="Refresh analytics", style="Primary.TButton", command=self.refresh).grid(
+            row=4, column=0, sticky=tk.E, pady=(12, 0)
+        )
+
+    def _build_stat_card(self, master: tk.Misc, column: int, title: str, value: str) -> Dict[str, tk.Widget]:
+        card = ttk.Frame(master, padding=14, style="Card.TFrame")
+        card.grid(row=0, column=column, sticky=tk.EW, padx=(0 if column == 0 else 10, 0))
+        ttk.Label(card, text=title, style="CardHeading.TLabel").pack(anchor=tk.W)
+        value_label = ttk.Label(card, text=value, style="CardValue.TLabel")
+        value_label.pack(anchor=tk.W, pady=(6, 0))
+        return {"frame": card, "value": value_label}
 
     def refresh(self) -> None:
-        session = load_session_summary(self.settings.analytics.session_summary_path)
-        history = load_history(self.settings.analytics.history_path)
-        self._render_text(self.session_text, self._format_session(session))
-        self._render_text(self.history_text, self._format_history(history))
+        self.session_payload = load_session_summary(self.settings.analytics.session_summary_path)
+        self.history_payload = load_history(self.settings.analytics.history_path)
+        self._render_stats()
+        self._render_medals()
+        self._render_history()
 
-    def _format_session(self, payload: Optional[dict]) -> str:
-        if not payload:
-            return "No session analytics saved yet. Run the monitor to generate data."
-        lines = [
-            f"Session: {payload.get('session_name')}",
-            f"Duration: {int(payload.get('session_duration_seconds', 0))}s",
-            f"Total clips: {payload.get('total_clips', 0)}",
-            "Medal counts:",
-        ]
+    def _render_stats(self) -> None:
+        payload = self.session_payload or {}
         medal_counts = payload.get("medal_counts", {})
-        if medal_counts:
-            lines.extend([f"  - {name}: {count}" for name, count in medal_counts.items()])
-        else:
-            lines.append("  No medals recorded")
-        return "\n".join(lines)
+        duration = float(payload.get("session_duration_seconds", 0.0))
+        total_medals = sum(medal_counts.values())
+        pace = (total_medals / (duration / 60)) if duration > 0 else 0.0
 
-    def _format_history(self, history: Sequence[dict]) -> str:
-        if not history:
-            return "History file is empty."
-        latest = history[-5:]
-        formatted: List[str] = []
-        for entry in latest:
-            formatted.append(
-                f"{entry.get('session_name')} - clips: {entry.get('total_clips', 0)} - medals: {len(entry.get('medal_counts', {}))}"
+        stats = {
+            "clips": payload.get("total_clips", 0),
+            "medals": total_medals,
+            "pace": f"{pace:.1f}",
+        }
+        for key, value in stats.items():
+            self.stat_cards[key]["value"].configure(text=str(value))
+
+    def _render_medals(self) -> None:
+        for item in self.medal_tree.get_children():
+            self.medal_tree.delete(item)
+
+        payload = self.session_payload or {}
+        medal_counts = payload.get("medal_counts", {})
+        total = sum(medal_counts.values()) or 1
+        if not medal_counts:
+            self.medal_tree.insert("", tk.END, values=("No medals yet", "-", "-"))
+            return
+
+        for medal, count in sorted(medal_counts.items(), key=lambda item: item[1], reverse=True):
+            share = f"{(count / total) * 100:0.1f}%"
+            self.medal_tree.insert("", tk.END, values=(medal, count, share))
+
+    def _render_history(self) -> None:
+        for item in self.history_tree.get_children():
+            self.history_tree.delete(item)
+
+        if not self.history_payload:
+            self.history_tree.insert("", tk.END, values=("No history yet", "-", "-"))
+            return
+
+        for entry in self.history_payload[-5:]:
+            self.history_tree.insert(
+                "",
+                tk.END,
+                values=(
+                    entry.get("session_name", "session"),
+                    entry.get("total_clips", 0),
+                    len(entry.get("medal_counts", {})),
+                ),
             )
-        return "\n".join(formatted)
-
-    def _render_text(self, widget: tk.Text, content: str) -> None:
-        widget.configure(state=tk.NORMAL)
-        widget.delete("1.0", tk.END)
-        widget.insert(tk.END, content)
-        widget.configure(state=tk.DISABLED)
 
 
-class SettingsApp(tk.Tk):
+class SettingsApp(tb.Window if tb else tk.Tk):
     def __init__(self, config_path: Path):
-        super().__init__()
+        if tb:
+            super().__init__(themename="cyborg")
+        else:
+            super().__init__()
         self.title("Halo Infinite Clip Creator")
         self.config_path = config_path
         self.settings = self._load()
+        self.window_lookup: Dict[str, Tuple[int, int, int, int]] = {}
+        self._init_style()
         self._build_ui()
+
+    def _init_style(self) -> None:
+        self.colors = {
+            "background": "#0b1021",
+            "card": "#121a2f",
+            "accent": "#6ee7ff",
+            "text": "#e2e8f0",
+        }
+        self.configure(bg=self.colors["background"])
+        style = ttk.Style(self)
+        if tb:
+            style.theme_use("cyborg")
+        style.configure("Surface.TFrame", background=self.colors["background"])
+        style.configure("Card.TFrame", background=self.colors["card"], relief=tk.FLAT)
+        style.configure("Heading.TLabel", background=self.colors["background"], foreground=self.colors["text"], font=("Segoe UI", 18, "bold"))
+        style.configure("CardHeading.TLabel", background=self.colors["card"], foreground=self.colors["accent"], font=("Segoe UI", 10, "bold"))
+        style.configure("CardValue.TLabel", background=self.colors["card"], foreground=self.colors["text"], font=("Segoe UI", 18, "bold"))
+        style.configure("Primary.TButton", padding=6)
+        default_font = tkfont.nametofont("TkDefaultFont")
+        default_font.configure(size=10, family="Segoe UI")
 
     def _load(self) -> Settings:
         try:
@@ -245,46 +383,74 @@ class SettingsApp(tk.Tk):
             return default_settings()
 
     def _build_ui(self) -> None:
-        notebook = ttk.Notebook(self)
-        notebook.pack(fill=tk.BOTH, expand=True)
+        container = ttk.Frame(self, padding=16, style="Surface.TFrame")
+        container.pack(fill=tk.BOTH, expand=True)
+        container.columnconfigure(0, weight=1)
+        container.rowconfigure(1, weight=1)
 
-        notebook.add(self._build_capture_tab(), text="Capture")
-        notebook.add(self._build_medals_tab(), text="Medals")
-        notebook.add(self._build_analytics_tab(), text="Analytics")
+        self._build_header(container)
 
-        save_frame = ttk.Frame(self, padding=8)
-        save_frame.pack(fill=tk.X)
-        ttk.Button(save_frame, text="Save configuration", command=self._save).pack(side=tk.RIGHT)
-        ttk.Label(save_frame, text=f"Config: {self.config_path}").pack(side=tk.LEFT)
+        notebook = ttk.Notebook(container)
+        notebook.grid(row=1, column=0, sticky=tk.NSEW)
 
-    def _build_capture_tab(self) -> ttk.Frame:
-        frame = ttk.Frame(self, padding=8)
+        notebook.add(self._build_capture_tab(notebook), text="Capture")
+        notebook.add(self._build_medals_tab(notebook), text="Medals")
+        notebook.add(self._build_analytics_tab(notebook), text="Analytics")
+
+        save_frame = ttk.Frame(container, padding=8, style="Surface.TFrame")
+        save_frame.grid(row=2, column=0, sticky=tk.EW, pady=(12, 0))
+        ttk.Label(save_frame, text=f"Config: {self.config_path}", foreground=self.colors["text"], background=self.colors["background"]).pack(side=tk.LEFT)
+        ttk.Button(save_frame, text="Save configuration", style="Primary.TButton", command=self._save).pack(side=tk.RIGHT)
+
+    def _build_header(self, master: tk.Misc) -> None:
+        hero = ttk.Frame(master, padding=12, style="Surface.TFrame")
+        hero.grid(row=0, column=0, sticky=tk.EW, pady=(0, 12))
+        hero.columnconfigure(0, weight=1)
+        ttk.Label(hero, text="Halo Infinite Clip Creator", style="Heading.TLabel").grid(row=0, column=0, sticky=tk.W)
+        ttk.Label(
+            hero,
+            text="Select the Halo window, dial in medals, and monitor your streaks in one high-tech control deck.",
+            background=self.colors["background"],
+            foreground=self.colors["text"],
+        ).grid(row=1, column=0, sticky=tk.W)
+
+    def _build_capture_tab(self, master: tk.Misc) -> ttk.Frame:
+        frame = ttk.Frame(master, padding=12, style="Surface.TFrame")
         frame.columnconfigure(1, weight=1)
         region = self.settings.monitor.capture_region
 
-        ttk.Label(frame, text="OBS host").grid(row=0, column=0, sticky=tk.W)
+        connection_card = ttk.Frame(frame, padding=14, style="Card.TFrame")
+        connection_card.grid(row=0, column=0, columnspan=2, sticky=tk.EW, pady=(0, 12))
+        connection_card.columnconfigure(1, weight=1)
+        ttk.Label(connection_card, text="OBS connection", style="CardHeading.TLabel").grid(row=0, column=0, columnspan=2, sticky=tk.W, pady=(0, 8))
         self.obs_host = tk.StringVar(value=self.settings.obs.host)
-        ttk.Entry(frame, textvariable=self.obs_host).grid(row=0, column=1, sticky=tk.EW)
-
-        ttk.Label(frame, text="OBS port").grid(row=1, column=0, sticky=tk.W)
         self.obs_port = tk.IntVar(value=self.settings.obs.port)
-        ttk.Entry(frame, textvariable=self.obs_port).grid(row=1, column=1, sticky=tk.EW)
-
-        ttk.Label(frame, text="OBS password").grid(row=2, column=0, sticky=tk.W)
         self.obs_password = tk.StringVar(value=self.settings.obs.password)
-        ttk.Entry(frame, textvariable=self.obs_password, show="*").grid(row=2, column=1, sticky=tk.EW)
-
-        ttk.Label(frame, text="Trigger delay (s)").grid(row=3, column=0, sticky=tk.W)
         self.trigger_delay = tk.DoubleVar(value=self.settings.obs.trigger_delay_seconds)
-        ttk.Entry(frame, textvariable=self.trigger_delay).grid(row=3, column=1, sticky=tk.EW)
+        for idx, (label, var) in enumerate(
+            [
+                ("OBS host", self.obs_host),
+                ("OBS port", self.obs_port),
+                ("OBS password", self.obs_password),
+                ("Trigger delay (s)", self.trigger_delay),
+            ]
+        ):
+            ttk.Label(connection_card, text=label, background=self.colors["card"], foreground=self.colors["text"]).grid(
+                row=idx + 1, column=0, sticky=tk.W, pady=2
+            )
+            show = "*" if label == "OBS password" else None
+            ttk.Entry(connection_card, textvariable=var, show=show).grid(row=idx + 1, column=1, sticky=tk.EW, pady=2)
 
-        ttk.Label(frame, text="Capture region").grid(row=4, column=0, sticky=tk.W, pady=(8, 0))
+        region_card = ttk.Frame(frame, padding=14, style="Card.TFrame")
+        region_card.grid(row=1, column=0, columnspan=2, sticky=tk.NSEW)
+        region_card.columnconfigure(1, weight=1)
+        ttk.Label(region_card, text="Capture region", style="CardHeading.TLabel").grid(row=0, column=0, sticky=tk.W)
         self.left_var = tk.IntVar(value=region.left)
         self.top_var = tk.IntVar(value=region.top)
         self.width_var = tk.IntVar(value=region.width)
         self.height_var = tk.IntVar(value=region.height)
-        coords = ttk.Frame(frame)
-        coords.grid(row=5, column=0, columnspan=2, sticky=tk.EW)
+        coords = ttk.Frame(region_card, style="Card.TFrame")
+        coords.grid(row=1, column=0, columnspan=2, sticky=tk.EW, pady=(6, 4))
         for idx, (label, var) in enumerate(
             [
                 ("Left", self.left_var),
@@ -293,23 +459,46 @@ class SettingsApp(tk.Tk):
                 ("Height", self.height_var),
             ]
         ):
-            ttk.Label(coords, text=label).grid(row=0, column=idx * 2, sticky=tk.W)
-            ttk.Entry(coords, textvariable=var, width=8).grid(row=0, column=idx * 2 + 1, padx=(0, 8))
+            ttk.Label(coords, text=label, background=self.colors["card"], foreground=self.colors["text"]).grid(
+                row=0, column=idx * 2, sticky=tk.W, padx=(0, 4)
+            )
+            ttk.Entry(coords, textvariable=var, width=8).grid(row=0, column=idx * 2 + 1, padx=(0, 10))
 
-        ttk.Button(frame, text="Pick region from screen", command=self._pick_region).grid(
-            row=6, column=0, columnspan=2, sticky=tk.W, pady=6
+        ttk.Button(region_card, text="Pick region from screen", style="Primary.TButton", command=self._pick_region).grid(
+            row=2, column=0, sticky=tk.W
         )
+
+        self.window_hint = tk.StringVar(value=self.settings.monitor.preferred_window_title or "Halo Infinite")
+        window_card = ttk.Frame(frame, padding=14, style="Card.TFrame")
+        window_card.grid(row=2, column=0, columnspan=2, sticky=tk.NSEW, pady=(12, 0))
+        window_card.columnconfigure(1, weight=1)
+        ttk.Label(window_card, text="Halo window auto-detect", style="CardHeading.TLabel").grid(row=0, column=0, sticky=tk.W)
+        ttk.Label(
+            window_card,
+            text="Scan for a running Halo Infinite window and snap the capture region to it.",
+            background=self.colors["card"],
+            foreground=self.colors["text"],
+        ).grid(row=1, column=0, columnspan=2, sticky=tk.W)
+        ttk.Label(window_card, text="Window title", background=self.colors["card"], foreground=self.colors["text"]).grid(
+            row=2, column=0, sticky=tk.W, pady=(6, 0)
+        )
+        self.window_combo = ttk.Combobox(window_card, textvariable=self.window_hint, state="readonly")
+        self.window_combo.grid(row=2, column=1, sticky=tk.EW, pady=(6, 0))
+        button_bar = ttk.Frame(window_card, style="Card.TFrame")
+        button_bar.grid(row=3, column=0, columnspan=2, sticky=tk.E, pady=(6, 0))
+        ttk.Button(button_bar, text="Scan", style="Primary.TButton", command=self._scan_windows).pack(side=tk.LEFT, padx=(0, 6))
+        ttk.Button(button_bar, text="Snap to window", command=self._apply_window_region).pack(side=tk.LEFT)
         return frame
 
-    def _build_medals_tab(self) -> ttk.Frame:
-        frame = ttk.Frame(self, padding=8)
+    def _build_medals_tab(self, master: tk.Misc) -> ttk.Frame:
+        frame = ttk.Frame(master, padding=12, style="Surface.TFrame")
         frame.columnconfigure(0, weight=1)
         self.medal_editor = MedalEditor(frame, self.settings.monitor.medals)
         self.medal_editor.grid(row=0, column=0, sticky=tk.NSEW)
         return frame
 
-    def _build_analytics_tab(self) -> ttk.Frame:
-        frame = AnalyticsPanel(self, self.settings)
+    def _build_analytics_tab(self, master: tk.Misc) -> ttk.Frame:
+        frame = AnalyticsPanel(master, self.settings)
         return frame
 
     def _pick_region(self) -> None:
@@ -320,6 +509,35 @@ class SettingsApp(tk.Tk):
             self.height_var.set(region.height)
 
         RegionSelector(self, callback)
+
+    def _scan_windows(self) -> None:
+        hint = self.window_hint.get().strip() or None
+        windows = _list_windows(hint)
+        if not windows:
+            messagebox.showwarning("No windows", "No active windows found that match Halo. Launch the game and try again.")
+            self.window_lookup = {}
+            self.window_combo["values"] = []
+            return
+        self.window_lookup = windows
+        titles = sorted(windows.keys())
+        self.window_combo["values"] = titles
+        preferred = self.settings.monitor.preferred_window_title
+        if preferred and preferred in windows:
+            self.window_combo.set(preferred)
+        else:
+            self.window_combo.set(titles[0])
+        self._apply_window_region()
+
+    def _apply_window_region(self) -> None:
+        title = self.window_hint.get().strip()
+        if not title or title not in self.window_lookup:
+            messagebox.showinfo("Select a window", "Choose a detected Halo window before snapping the region.")
+            return
+        left, top, width, height = self.window_lookup[title]
+        self.left_var.set(int(left))
+        self.top_var.set(int(top))
+        self.width_var.set(int(width))
+        self.height_var.set(int(height))
 
     def _save(self) -> None:
         region = CaptureRegion(
@@ -344,6 +562,7 @@ class SettingsApp(tk.Tk):
             grayscale=self.settings.monitor.grayscale,
             tesseract_config=self.settings.monitor.tesseract_config,
             detection_buffer_seconds=self.settings.monitor.detection_buffer_seconds,
+            preferred_window_title=self.window_hint.get().strip() or None,
         )
         self.settings = Settings(obs=obs, monitor=monitor, analytics=self.settings.analytics)
         save_settings(self.settings, self.config_path)

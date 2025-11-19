@@ -13,6 +13,7 @@ monitor:
     top: 100
     width: 420
     height: 240
+  preferred_window_title: "Halo Infinite"
   sample_rate_hz: 4.0
   grayscale: true
   tesseract_config: "--psm 6 --oem 3"
