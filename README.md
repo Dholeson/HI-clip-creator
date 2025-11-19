@@ -60,6 +60,9 @@ monitor:
   tesseract_config: "--psm 6 --oem 3"
   detection_buffer_seconds: 6.0
   preferred_window_title: "Halo Infinite"
+  preferred_process_names:
+    - "HaloInfinite.exe"
+  monitor_index: 1
   medals:
     - name: OVERKILL
       aliases: ["OVER KILL"]
@@ -86,7 +89,7 @@ Run the monitor with your configuration:
 python -m halo_clip_creator --config config.yaml --log-level INFO
 ```
 
-Prefer a UI? Launch the configuration app to pick the capture box, manage medals, and review analytics without editing YAML. The UI can scan for a live Halo Infinite window and snap the capture region to it, and it surfaces live stats, medal distributions, and recent sessions in a futuristic control deck:
+Prefer a UI? Launch the configuration app to pick the capture box (on any display), manage medals, and review analytics without editing YAML. The UI can scan for a live Halo Infinite window by both title and executable name, snap the capture region to that window, and surface live stats, medal distributions, and recent sessions in a futuristic control deck:
 
 ```bash
 python -m halo_clip_creator --ui --config config.yaml

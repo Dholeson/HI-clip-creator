@@ -43,6 +43,8 @@ class MonitorSettings:
     tesseract_config: str = "--psm 6"
     detection_buffer_seconds: float = 6.0
     preferred_window_title: Optional[str] = None
+    preferred_process_names: List[str] = field(default_factory=list)
+    monitor_index: int = 1
 
 
 @dataclass
@@ -117,6 +119,8 @@ class _Loader:
             tesseract_config=str(data.get("tesseract_config", "--psm 6")),
             detection_buffer_seconds=float(data.get("detection_buffer_seconds", 6.0)),
             preferred_window_title=data.get("preferred_window_title"),
+            preferred_process_names=[str(name) for name in data.get("preferred_process_names", [])],
+            monitor_index=int(data.get("monitor_index", 1)),
         )
 
     def load_obs(self, data: Dict) -> OBSSettings:
@@ -165,6 +169,8 @@ def default_settings() -> Settings:
             MedalSettings(name="DOUBLE KILL", aliases=["Double Kill"], match_threshold=0.65, cooldown_seconds=4.0),
         ],
         preferred_window_title="Halo Infinite",
+        preferred_process_names=["HaloInfinite.exe"],
+        monitor_index=1,
     )
     analytics = AnalyticsSettings()
     return Settings(obs=obs, monitor=monitor, analytics=analytics)
@@ -188,6 +194,8 @@ def settings_to_dict(settings: Settings) -> Dict:
             "tesseract_config": monitor.tesseract_config,
             "detection_buffer_seconds": monitor.detection_buffer_seconds,
             "preferred_window_title": monitor.preferred_window_title,
+            "preferred_process_names": monitor.preferred_process_names,
+            "monitor_index": monitor.monitor_index,
         }
 
     def _convert_obs(obs: OBSSettings) -> Dict:

@@ -14,6 +14,9 @@ monitor:
     width: 420
     height: 240
   preferred_window_title: "Halo Infinite"
+  preferred_process_names:
+    - "HaloInfinite.exe"
+  monitor_index: 1
   sample_rate_hz: 4.0
   grayscale: true
   tesseract_config: "--psm 6 --oem 3"

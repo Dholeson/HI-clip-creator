@@ -51,6 +51,10 @@ def main() -> None:  # pragma: no cover - convenience wrapper
             "ttkbootstrap",
             "--collect-submodules",
             "ttkbootstrap",
+            "--hidden-import",
+            "psutil",
+            "--collect-submodules",
+            "psutil",
             "--add-data",
             add_data_arg,
         ]
