@@ -8,19 +8,17 @@ consumer side (Tesseract and OBS are still required at runtime).
 """
 from __future__ import annotations
 
-import importlib.util
 import os
 from pathlib import Path
 import sys
 
-
-PYINSTALLER_SPEC = importlib.util.find_spec("PyInstaller.__main__")
-if PYINSTALLER_SPEC is None:  # pragma: no cover - runtime convenience script
-    sys.exit("PyInstaller is not installed. Install it with `pip install pyinstaller`.")
-
-PyInstaller = importlib.util.module_from_spec(PYINSTALLER_SPEC)
-assert PYINSTALLER_SPEC.loader is not None
-PYINSTALLER_SPEC.loader.exec_module(PyInstaller)  # type: ignore[arg-type]
+try:  # pragma: no cover - runtime convenience script
+    import PyInstaller.__main__ as PyInstaller
+except ModuleNotFoundError:  # pragma: no cover - runtime convenience script
+    sys.exit(
+        "PyInstaller is not installed. Install it with `pip install pyinstaller` "
+        "or `pip install -r requirements-build.txt`."
+    )
 
 
 def main() -> None:  # pragma: no cover - convenience wrapper

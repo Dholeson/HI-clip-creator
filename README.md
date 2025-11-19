@@ -95,10 +95,11 @@ python -m halo_clip_creator --ui --config config.yaml
 
 ## Building a release binary
 
-You can publish a single-file binary for players who don't want to install Python. The project includes a helper that wraps PyInstaller:
+You can publish a single-file binary for players who don't want to install Python. Install the build dependency first (either manually or via the provided build requirements file), then run the PyInstaller helper:
 
 ```bash
-pip install pyinstaller
+pip install -r requirements-build.txt
+# or: pip install pyinstaller
 python build_binary.py
 ```
 
