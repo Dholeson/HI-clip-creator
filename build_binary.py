@@ -39,6 +39,10 @@ def main() -> None:  # pragma: no cover - convenience wrapper
             "--noconfirm",
             "--collect-all",
             "halo_clip_creator",
+            "--hidden-import",
+            "cv2",
+            "--collect-submodules",
+            "cv2",
             "--add-data",
             add_data_arg,
         ]

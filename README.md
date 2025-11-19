@@ -103,4 +103,4 @@ pip install -r requirements-build.txt
 python build_binary.py
 ```
 
-The compiled binary will be written to `dist/halo-clip-creator` (or `halo-clip-creator.exe` on Windows) and bundles the CLI + UI entrypoints. Tesseract and OBS with obs-websocket still need to be installed on the target machine. You can attach the `dist/` artifact directly to a GitHub release.
+The compiled binary will be written to `dist/halo-clip-creator` (or `halo-clip-creator.exe` on Windows) and bundles the CLI + UI entrypoints. The builder explicitly pulls in OpenCV (`cv2`) so OCR monitoring works out-of-the-box. Tesseract and OBS with obs-websocket still need to be installed on the target machine. You can attach the `dist/` artifact directly to a GitHub release.
