@@ -1,0 +1,10 @@
+mss
+opencv-python
+numpy
+obs-websocket-py
+PyYAML
+pytesseract
+Pillow
+pygetwindow
+ttkbootstrap
+psutil

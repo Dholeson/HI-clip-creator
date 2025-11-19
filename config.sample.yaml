@@ -1,0 +1,39 @@
+obs:
+  host: 127.0.0.1
+  port: 4455
+  password: secret
+  trigger_delay_seconds: 0.25
+  filename_format: "HI_{session}_{timestamp}_{medals}"
+  timestamp_format: "%Y%m%d-%H%M%S"
+  sanitize_filenames: true
+
+monitor:
+  capture_region:
+    left: 100
+    top: 100
+    width: 420
+    height: 240
+  preferred_window_title: "Halo Infinite"
+  preferred_process_names:
+    - "HaloInfinite.exe"
+  monitor_index: 1
+  sample_rate_hz: 4.0
+  grayscale: true
+  tesseract_config: "--psm 6 --oem 3"
+  detection_buffer_seconds: 6.0
+  medals:
+    - name: OVERKILL
+      aliases: ["OVER KILL"]
+      match_threshold: 0.7
+      cooldown_seconds: 8.0
+    - name: KILLING SPREE
+      aliases: ["SPREE"]
+      match_threshold: 0.72
+      cooldown_seconds: 6.0
+
+analytics:
+  enabled: true
+  session_name: "my-session"
+  session_summary_path: analytics_session.json
+  history_path: analytics_history.json
+  save_on_exit: true
